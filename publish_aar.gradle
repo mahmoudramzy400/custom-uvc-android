@@ -1,90 +1,70 @@
-apply plugin: 'maven-publish'
-apply plugin: 'signing'
+// publish_aar.gradle  (NO `plugins {}` here)
 
-def sonatypeUsername = rootProject.hasProperty('ossrhUsername')? rootProject.ossrhUsername : ''
-def sonatypePassword = rootProject.hasProperty('ossrhPassword')? rootProject.ossrhPassword : ''
+if (!project.plugins.hasPlugin('maven-publish')) {
+    apply plugin: 'maven-publish'
+}
 
-group = publishedGroupId
-version = libraryVersion
+ext {
+    PUBLISH_GROUP_ID    = 'com.github.mahmoudramzy400'
+    PUBLISH_VERSION     = project.findProperty('PUBLISH_VERSION') ?: 'v1.0.0-flutter'
+    PUBLISH_ARTIFACT_ID = project.findProperty('PUBLISH_ARTIFACT_ID') ?: project.name
+}
 
-//task sourcesJar(type: Jar) {
-//    archiveClassifier.set("sources")
-//    from android.sourceSets.main.java.srcDirs
-//}
+// -------- ANDROID LIBRARIES --------
+plugins.withId('com.android.library') {
+    // Make AGP expose a publishable "release" variant + sources
+    android {
+        publishing {
+            singleVariant("release") {
+                withSourcesJar()
+                // withJavadocJar() // optional
+            }
+        }
+    }
 
-//task javadoc(type: Javadoc) {
-//    options.addStringOption('Xdoclint:none', '-quiet')
-//    source = android.sourceSets.main.java.srcDirs
-//    classpath += project.files(android.getBootClasspath().join(File.pathSeparator))
-//}
-//
-//task javadocJar(type: Jar, dependsOn: javadoc) {
-//    archiveClassifier.set("javadoc")
-//    from javadoc.destinationDir
-//}
-
-android {
-    publishing {
-        singleVariant('release') {
-            withSourcesJar()
-            withJavadocJar()
+    // Register the Maven publication after Android components exist
+    afterEvaluate {
+        publishing {
+            publications {
+                create("release", MavenPublication) {
+                    groupId    = PUBLISH_GROUP_ID
+                    artifactId = PUBLISH_ARTIFACT_ID
+                    version    = PUBLISH_VERSION
+                    from components.release
+                }
+            }
         }
     }
 }
 
-afterEvaluate {
+// -------- JAVA / KOTLIN (non-Android) LIBRARIES --------
+plugins.withId('java-library') {
+    java { withSourcesJar() }
     publishing {
         publications {
-            release(MavenPublication) {
-                artifactId = artifact
-                from components.release
-//                artifact javadocJar
-//                artifact sourcesJar
-                pom {
-                    name = artifact
-                    description = libraryDescription
-                    url = siteUrl
-                    licenses {
-                        license {
-                            name = licenseName
-                            url = licenseUrl
-                        }
-                    }
-                    developers {
-                        developer {
-                            id = developerId
-                            name = developerName
-                            email = developerEmail
-                        }
-                    }
-                    scm {
-                        connection = gitUrl
-                        developerConnection = gitUrl
-                        url = siteUrl
-                    }
-                }
-            }
-        }
-        repositories {
-            maven {
-                def releasesRepoUrl = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
-                def snapshotsRepoUrl = "https://s01.oss.sonatype.org/content/repositories/snapshots/"
-                url = version.endsWith('SNAPSHOT') ? snapshotsRepoUrl : releasesRepoUrl
-                credentials {
-                    username = "${sonatypeUsername}"
-                    password = "${sonatypePassword}"
-                }
+            create("mavenJava", MavenPublication) {
+                groupId    = PUBLISH_GROUP_ID
+                artifactId = PUBLISH_ARTIFACT_ID
+                version    = PUBLISH_VERSION
+                from components.java
             }
         }
     }
 }
 
-signing {
-    sign publishing.publications
+// If a module uses plain 'java' (not 'java-library'), handle it too
+plugins.withId('java') {
+    if (!project.plugins.hasPlugin('java-library')) {
+        java { withSourcesJar() }
+        publishing {
+            publications {
+                create("mavenJava", MavenPublication) {
+                    groupId    = PUBLISH_GROUP_ID
+                    artifactId = PUBLISH_ARTIFACT_ID
+                    version    = PUBLISH_VERSION
+                    from components.java
+                }
+            }
+        }
+    }
 }
-
-//javadoc {
-//    if (JavaVersion.current().isJava9Compatible()) {
-//        options.addBooleanOption('html5', true)
-//    }
-//}
